@@ -19,6 +19,7 @@ from sklearn.metrics import (
     recall_score,
 )
 from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
 import xgboost as xgb
 import warnings
 
@@ -84,7 +85,7 @@ def train_and_evaluate(X, y):
 
     # Train XGBoost
     t0 = time.perf_counter()
-    model = xgb.XGBClassifier(
+    xgb_model = xgb.XGBClassifier(
         n_estimators=200,
         max_depth=4,
         learning_rate=0.1,
@@ -98,12 +99,22 @@ def train_and_evaluate(X, y):
         tree_method="hist",
         n_jobs=-1,
     )
-    model.fit(X_tr, y_tr)
+    xgb_model.fit(X_tr, y_tr)
+
+    # Train Logistic Regression as second model
+    lr_model = LogisticRegression(
+        max_iter=2000, solver="lbfgs", class_weight="balanced", random_state=42
+    )
+    lr_model.fit(X_tr, y_tr)
     train_time = time.perf_counter() - t0
+
+    # Ensemble: average probabilities from both models
+    xgb_val_proba = xgb_model.predict_proba(X_val)[:, 1]
+    lr_val_proba = lr_model.predict_proba(X_val)[:, 1]
+    val_proba = (xgb_val_proba + lr_val_proba) / 2.0
 
     # Find optimal threshold on validation set (maximize F1)
     from sklearn.metrics import f1_score
-    val_proba = model.predict_proba(X_val)[:, 1]
     thresholds = np.linspace(0.01, 0.99, 99)
     best_thresh = 0.5
     best_f1 = -1
@@ -114,9 +125,11 @@ def train_and_evaluate(X, y):
             best_f1 = f1
             best_thresh = thresh
 
-    # Predict on test set using optimal threshold
+    # Predict on test set using ensemble and optimal threshold
     t0 = time.perf_counter()
-    y_proba = model.predict_proba(X_test_scaled)[:, 1]
+    xgb_test_proba = xgb_model.predict_proba(X_test_scaled)[:, 1]
+    lr_test_proba = lr_model.predict_proba(X_test_scaled)[:, 1]
+    y_proba = (xgb_test_proba + lr_test_proba) / 2.0
     y_pred = (y_proba >= best_thresh).astype(int)
     infer_time = time.perf_counter() - t0
 

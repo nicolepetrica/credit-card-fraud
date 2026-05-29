@@ -33,12 +33,41 @@ def load_data():
     return X, y
 
 
+def engineer_features(X):
+    """Add interaction and derived features."""
+    X = X.copy()
+    v_cols = [c for c in X.columns if c.startswith("V")]
+
+    # Amount interactions with V features
+    for v in v_cols:
+        X[f"Amount_x_{v}"] = X["Amount"] * X[v]
+
+    # Amount transformations
+    X["Amount_log"] = np.log1p(X["Amount"])
+    X["Amount_sq"] = X["Amount"] ** 2
+
+    # Time-based cyclical features
+    X["Time_hour"] = (X["Time"] / 3600) % 24
+    X["Time_sin"] = np.sin(2 * np.pi * X["Time_hour"] / 24)
+    X["Time_cos"] = np.cos(2 * np.pi * X["Time_hour"] / 24)
+    X = X.drop("Time_hour", axis=1)
+
+    # Amount quantile bucket
+    X["Amount_q10"] = pd.qcut(X["Amount"], q=10, labels=False, duplicates="drop")
+
+    return X
+
+
 def train_and_evaluate(X, y):
     """Train XGBoost model and evaluate. Returns metrics dict."""
     # Train/test split (stratified to preserve fraud ratio)
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
+
+    # Feature engineering
+    X_train = engineer_features(X_train)
+    X_test = engineer_features(X_test)
 
     # Scale features
     scaler = StandardScaler()

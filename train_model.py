@@ -45,8 +45,13 @@ def train_and_evaluate(X, y):
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
+    # Further split train into train+val for threshold tuning (stratified)
+    X_tr, X_val, y_tr, y_val = train_test_split(
+        X_train_scaled, y_train, test_size=0.2, random_state=42, stratify=y_train
+    )
+
     # Compute class imbalance ratio for scale_pos_weight
-    ratio = (y_train == 0).sum() / (y_train == 1).sum()
+    ratio = (y_tr == 0).sum() / (y_tr == 1).sum()
 
     # Train XGBoost
     t0 = time.perf_counter()
@@ -64,13 +69,26 @@ def train_and_evaluate(X, y):
         tree_method="hist",
         n_jobs=-1,
     )
-    model.fit(X_train_scaled, y_train)
+    model.fit(X_tr, y_tr)
     train_time = time.perf_counter() - t0
 
-    # Predict
+    # Find optimal threshold on validation set (maximize F1)
+    from sklearn.metrics import f1_score
+    val_proba = model.predict_proba(X_val)[:, 1]
+    thresholds = np.linspace(0.01, 0.99, 99)
+    best_thresh = 0.5
+    best_f1 = -1
+    for thresh in thresholds:
+        y_val_pred = (val_proba >= thresh).astype(int)
+        f1 = f1_score(y_val, y_val_pred, zero_division=0)
+        if f1 > best_f1:
+            best_f1 = f1
+            best_thresh = thresh
+
+    # Predict on test set using optimal threshold
     t0 = time.perf_counter()
-    y_pred = model.predict(X_test_scaled)
     y_proba = model.predict_proba(X_test_scaled)[:, 1]
+    y_pred = (y_proba >= best_thresh).astype(int)
     infer_time = time.perf_counter() - t0
 
     # Metrics
@@ -94,6 +112,7 @@ def train_and_evaluate(X, y):
     metrics["false_positives"] = int(fp)
     metrics["false_negatives"] = int(fn)
     metrics["true_negatives"] = int(tn)
+    metrics["optimal_threshold"] = best_thresh
 
     return metrics
 

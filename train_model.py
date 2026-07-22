@@ -15,6 +15,7 @@ from sklearn.metrics import (
     roc_auc_score,
     average_precision_score,
     f1_score,
+    fbeta_score,
     precision_score,
     recall_score,
 )

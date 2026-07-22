@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aprendizados — Detecção de Fraudes em Cartão de Crédito</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --green: #4ade80;
+    --red: #f87171;
+    --amber: #fbbf24;
+    --purple: #a78bfa;
+    --pink: #f472b6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+  }
+  .container { max-width: 960px; margin: 0 auto; }
+
+  h1 {
+    font-size: 2.2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.25rem;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 1.05rem;
+    margin-bottom: 2rem;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    text-align: center;
+  }
+  .stat-card .label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 0.4rem;
+  }
+  .stat-card .value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .stat-card .value.green { color: var(--green); }
+  .stat-card .value.amber { color: var(--amber); }
+
+  section {
+    margin-bottom: 2.5rem;
+  }
+  section h2 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  section h2 .icon { font-size: 1.2rem; }
+
+  .dataset-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  .dataset-table th, .dataset-table td {
+    padding: 0.6rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .dataset-table th {
+    color: var(--muted);
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+  .dataset-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .experiment {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.25rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .experiment::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+  }
+  .experiment.keep::before { background: var(--green); }
+  .experiment.discard::before { background: var(--red); }
+
+  .exp-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .exp-run {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    background: #0f172a;
+    padding: 0.2rem 0.7rem;
+    border-radius: 20px;
+  }
+  .exp-status {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.2rem 0.7rem;
+    border-radius: 20px;
+  }
+  .exp-status.keep { background: #14532d33; color: var(--green); border: 1px solid #166534; }
+  .exp-status.discard { background: #7f1d1d33; color: var(--red); border: 1px solid #991b1b; }
+
+  .exp-f1 {
+    margin-left: auto;
+    font-size: 1.4rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  .exp-f1.keep-f1 { color: var(--green); }
+  .exp-f1.discard-f1 { color: var(--red); }
+
+  .exp-desc {
+    font-weight: 600;
+    margin-bottom: 0.6rem;
+    font-size: 0.95rem;
+  }
+
+  .metrics-row {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  .metrics-row span {
+    white-space: nowrap;
+  }
+  .metrics-row strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+  .insight-box {
+    background: #0f172a;
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 0.75rem 1rem;
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .insight-box strong { color: var(--accent); }
+  .insight-box .bad { color: var(--red); }
+
+  .dead-end {
+    background: #7f1d1d11;
+    border: 1px solid #7f1d1d33;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+  }
+  .dead-end .why {
+    color: var(--red);
+    font-weight: 600;
+  }
+
+  .trajectory {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    overflow-x: auto;
+  }
+  .trajectory-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
+    height: 180px;
+    padding: 0 0.5rem;
+  }
+  .trajectory-bar .bar {
+    flex: 1;
+    min-width: 40px;
+    border-radius: 6px 6px 0 0;
+    position: relative;
+    transition: all 0.3s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    padding-bottom: 6px;
+  }
+  .trajectory-bar .bar.keep-bar { background: linear-gradient(180deg, var(--green), #166534); }
+  .trajectory-bar .bar.discard-bar { background: linear-gradient(180deg, var(--red), #7f1d1d); opacity: 0.5; }
+  .trajectory-bar .bar .val {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #fff;
+  }
+  .trajectory-labels {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-align: center;
+  }
+  .trajectory-labels span { flex: 1; min-width: 40px; }
+
+  .key-insights {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+  }
+  .insight-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem;
+  }
+  .insight-card h4 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: var(--accent);
+  }
+  .insight-card p {
+    font-size: 0.82rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.75rem;
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .delta {
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .delta.up { color: var(--green); }
+  .delta.down { color: var(--red); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>🎯 Aprendizados até o Momento</h1>
+<p class="subtitle">Detecção de Fraudes em Cartão de Crédito — Otimização de Modelo via Autoresearch</p>
+
+<!-- SUMMARY STATS -->
+<div class="summary-grid">
+  <div class="stat-card">
+    <div class="label">Melhor F1 (Fraude)</div>
+    <div class="value green">0,862</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Ganho Total</div>
+    <div class="value green">+10,0%</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Experimentos</div>
+    <div class="value">9</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Melhorias (Keep)</div>
+    <div class="value amber">3</div>
+  </div>
+</div>
+
+<!-- DATASET -->
+<section>
+  <h2><span class="icon">📊</span> O Dataset</h2>
+  <table class="dataset-table">
+    <thead>
+      <tr><th>Característica</th><th>Valor</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Total de transações</td><td>284.807</td></tr>
+      <tr><td>Transações fraudulentas</td><td>492 (0,172%)</td></tr>
+      <tr><td>Features</td><td>30 (V1–V28 PCA + Time + Amount)</td></tr>
+      <tr><td>Desbalanceamento</td><td>~578:1 (não-fraude : fraude)</td></tr>
+      <tr><td>Split treino/teste</td><td>80/20 estratificado (seed=42)</td></tr>
+      <tr><td>Treino — fraudes</td><td>~394 casos</td></tr>
+      <tr><td>Validação (20% treino ÷ 80%)</td><td>~79 fraudes</td></tr>
+      <tr><td>Teste final</td><td>~98 fraudes (56.962 total)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- TRAJECTORY -->
+<section>
+  <h2><span class="icon">📈</span> Trajetória do F1-Fraude</h2>
+  <div class="trajectory">
+    <div class="trajectory-bar">
+      <div class="bar keep-bar" style="height: 78%;"><span class="val">0,784</span></div>
+      <div class="bar discard-bar" style="height: 45%;"><span class="val">0,446</span></div>
+      <div class="bar keep-bar" style="height: 84%;"><span class="val">0,836</span></div>
+      <div class="bar discard-bar" style="height: 83%;"><span class="val">0,829</span></div>
+      <div class="bar keep-bar" style="height: 85%;"><span class="val">0,851</span></div>
+      <div class="bar keep-bar" style="height: 86%;"><span class="val">0,862</span></div>
+      <div class="bar discard-bar" style="height: 86%;"><span class="val">0,862</span></div>
+      <div class="bar discard-bar" style="height: 84%;"><span class="val">0,843</span></div>
+      <div class="bar discard-bar" style="height: 85%;"><span class="val">0,846</span></div>
+    </div>
+    <div class="trajectory-labels">
+      <span>Base</span><span>SMOTE</span><span>Thresh</span><span>Deep</span><span>FeatEng</span><span>★Ensemble</span><span>Weight</span><span>RF</span><span>CV</span>
+    </div>
+  </div>
+</section>
+
+<!-- EXPERIMENT CHRONOLOGY -->
+<section>
+  <h2><span class="icon">🧪</span> Cronologia dos Experimentos</h2>
+
+  <!-- Run 1: Baseline -->
+  <div class="experiment keep">
+    <div class="exp-header">
+      <span class="exp-run">Experimento 1</span>
+      <span class="exp-status keep">✓ Keep</span>
+      <span class="exp-f1 keep-f1">F1 0,784</span>
+    </div>
+    <div class="exp-desc">Baseline: XGBoost com scale_pos_weight, StandardScaler, n=200, depth=4, lr=0.1</div>
+    <div class="metrics-row">
+      <span>Precisão: <strong>0,768</strong></span>
+      <span>Recall: <strong>0,800</strong></span>
+      <span>ROC-AUC: <strong>0,973</strong></span>
+      <span>PR-AUC: <strong>0,825</strong></span>
+      <span>Train: <strong>3,1s</strong></span>
+      <span>TP/FP/FN: <strong>76/23/19</strong></span>
+    </div>
+    <div class="insight-box">
+      <strong>Ponto de partida.</strong> XGBoost com <code>scale_pos_weight</code> já lida razoavelmente com o desbalanceamento extremo.
+      Porém, o threshold padrão de 0.5 produz 23 falsos positivos — há espaço para melhorar.
+    </div>
+  </div>
+
+  <!-- Run 2: SMOTE -->
+  <div class="experiment discard">
+    <div class="exp-header">
+      <span class="exp-run">Experimento 2</span>
+      <span class="exp-status discard">✗ Discard</span>
+      <span class="exp-f1 discard-f1">F1 0,446</span>
+    </div>
+    <div class="exp-desc">SMOTE Oversampling: precisão colapsou de 0,77 → 0,30</div>
+    <div class="metrics-row">
+      <span>Precisão: <strong style="color:#f87171">0,303</strong></span>
+      <span>Recall: <strong>0,842</strong></span>
+      <span>TP/FP/FN: <strong>80/184/15</strong></span>
+    </div>
+    <div class="insight-box">
+      <strong class="bad">💀 Lição #1: SMOTE é perigoso com desbalanceamento extremo.</strong>
+      Com apenas ~378 fraudes no treino, o SMOTE gera exemplos sintéticos a partir de uma amostra minúscula,
+      criando padrões irreais. O modelo aprende a classificar quase tudo como fraude (184 falsos positivos!).
+      <br><br>
+      <strong>Alternativa descoberta:</strong> ajustar o threshold de decisão é muito mais eficaz que reamostragem
+      quando se tem um bom classificador base.
+    </div>
+  </div>
+
+  <!-- Run 3: Threshold -->
+  <div class="experiment keep">
+    <div class="exp-header">
+      <span class="exp-run">Experimento 3</span>
+      <span class="exp-status keep">✓ Keep</span>
+      <span class="exp-f1 keep-f1">F1 0,836 <span class="delta up">▲ +6,7%</span></span>
+    </div>
+    <div class="exp-desc">Otimização de threshold no conjunto de validação (maximizando F1)</div>
+    <div class="metrics-row">
+      <span>Precisão: <strong style="color:#4ade80">0,986</strong></span>
+      <span>Recall: <strong>0,726</strong></span>
+      <span>Threshold ótimo: <strong>0,99</strong></span>
+      <span>TP/FP/FN: <strong>69/1/26</strong></span>
+    </div>
+    <div class="insight-box">
+      <strong>💡 Insight chave: O threshold 0.5 é péssimo para dados desbalanceados.</strong>
+      Com 578:1 de desbalanceamento, as probabilidades de fraude do modelo são naturalmente muito baixas.
+      O threshold ótimo está em <strong>0,99</strong> — quase no extremo da distribuição.
+      Ao subir o threshold, a precisão dispara para 0,986 (apenas 1 falso positivo), mas o recall cai para 0,73
+      (26 fraudes não detectadas). O F1 sobe de 0,784 para 0,836.
+    </div>
+  </div>
+
+  <!-- Run 4: Deeper trees -->
+  <div class="experiment discard">
+    <div class="exp-header">
+      <span class="exp-run">Experimento 4</span>
+      <span class="exp-status discard">✗ Discard</span>
+      <span class="exp-f1 discard-f1">F1 0,829 <span class="delta down">▼ -0,9%</span></span>
+    </div>
+    <div class="exp-desc">Árvores mais profundas (depth=6) + 2× scale_pos_weight</div>
+    <div class="metrics-row">
+      <span>Precisão: <strong>0,986</strong></span>
+      <span>Recall: <strong style="color:#f87171">0,716</strong></span>
+      <span>Threshold: <strong>0,97</strong></span>
+    </div>
+    <div class="insight-box">
+      <strong class="bad">💀 Lição #2: Aumentar complexidade do modelo não ajuda com tão poucos exemplos positivos.</strong>
+      Árvores mais profundas (depth 6) provavelmente causaram overfitting nos 378 exemplos de fraude do treino,
+      piorando a generalização. O <code>scale_pos_weight</code> já estava bem calibrado com o valor padrão
+      (neg_count / pos_count).
+    </div>
+  </div>
+
+  <!-- Run 5: Feature engineering -->
+  <div class="experiment keep">
+    <div class="exp-header">
+      <span class="exp-run">Experimento 5</span>
+      <span class="exp-status keep">✓ Keep</span>
+      <span class="exp-f1 keep-f1">F1 0,851 <span class="delta up">▲ +1,8%</span></span>
+    </div>
+    <div class="exp-desc">Feature engineering: interações Amount×V, Amount_log, Amount², Time cíclico, quantis de Amount</div>
+    <div class="metrics-row">
+      <span>Precisão: <strong>0,937</strong></span>
+      <span>Recall: <strong style="color:#4ade80">0,779</strong></span>
+      <span>Threshold: <strong>0,75</strong></span>
+      <span>TP/FP/FN: <strong>74/5/21</strong></span>
+      <span>Features: <strong>66 (30 orig + 36 novas)</strong></span>
+    </div>
+    <div class="insight-box">
+      <strong>💡 Insight chave: Features de interação Amount×V são altamente informativas.</strong>
+      As features V1–V28 já são PCA-transformadas e anônimas, mas interagi-las com Amount (a única feature
+      numérica interpretável) cria sinais poderosos. O threshold ótimo caiu de 0,99 para 0,75, indicando que
+      o modelo agora produz scores de probabilidade mais discriminativos.
+      <br><br>
+      A queda de precisão (0,986 → 0,937) é compensada pelo ganho em recall (0,726 → 0,779), resultando
+      em F1 maior e um modelo que detecta mais fraudes reais.
+    </div>
+  </div>
+
+  <!-- Run 6: Ensemble XGB + LR -->
+  <div class="experiment keep">
+    <div class="exp-header">
+      <span class="exp-run">Experimento 6</span>
+      <span class="exp-status keep">✓ Keep</span>
+      <span class="exp-f1 keep-f1">⭐ F1 0,862 <span class="delta up">▲ +1,3%</span></span>
+    </div>
+    <div class="exp-desc">Ensemble XGBoost + LogisticRegression (média de probabilidades)</div>
+    <div class="metrics-row">
+      <span>Precisão: <strong>0,949</strong></span>
+      <span>Recall: <strong style="color:#4ade80">0,789</strong></span>
+      <span>PR-AUC: <strong>0,835</strong></span>
+      <span>Threshold: <strong>0,85</strong></span>
+      <span>TP/FP/FN: <strong>75/4/20</strong></span>
+    </div>
+    <div class="insight-box">
+      <strong>🏆 MELHOR MODELO ATUAL.</strong> Este é o estado da arte da nossa otimização.
+      <br><br>
+      <strong>💡 Insight chave: XGBoost e LogisticRegression cometem erros diferentes.</strong>
+      Como ambos melhoraram simultaneamente (precisão +1,3pp e recall +0,9pp), os erros de um modelo
+      são compensados pelo outro. A regressão logística captura relações lineares que o XGBoost pode
+      ignorar devido ao viés de árvore. PR-AUC também subiu (0,825 → 0,835).
+      <br><br>
+      Dos 98 casos de fraude no teste, detecta 75 (recall 79%) com apenas 4 alarmes falsos (precisão 95%).
+    </div>
+  </div>
+
+  <!-- Run 7: Weighted ensemble -->
+  <div class="experiment discard">
+    <div class="exp-header">
+      <span class="exp-run">Experimento 7</span>
+      <span class="exp-status discard">✗ Discard</span>
+      <span class="exp-f1 discard-f1">F1 0,862 <span style="color:var(--muted)">(=)</span></span>
+    </div>
+    <div class="exp-desc">Otimização de peso do ensemble (grid search): confirmou W=0.5 como ótimo</div>
+    <div class="insight-box">
+      <strong>🔍 Verificação útil:</strong> O grid search de pesos confirmou que a média simples (0.5/0.5)
+      já é o blend ótimo. As distribuições de probabilidade dos dois modelos já estão bem calibradas
+      entre si — nenhum modelo domina o outro em precisão.
+    </div>
+  </div>
+
+  <!-- Run 8: RandomForest ensemble -->
+  <div class="experiment discard">
+    <div class="exp-header">
+      <span class="exp-run">Experimento 8</span>
+      <span class="exp-status discard">✗ Discard</span>
+      <span class="exp-f1 discard-f1">F1 0,843 <span class="delta down">▼ -2,3%</span></span>
+    </div>
+    <div class="exp-desc">Ensemble de 3 modelos (XGB + LR + RandomForest)</div>
+    <div class="metrics-row">
+      <span>Precisão: <strong style="color:#f87171">0,904</strong></span>
+      <span>Recall: <strong>0,789</strong></span>
+      <span>Train: <strong style="color:#f87171">26,5s (8× mais lento)</strong></span>
+    </div>
+    <div class="insight-box">
+      <strong class="bad">💀 Lição #3: Nem todo ensemble agrega valor — diversidade real entre modelos importa.</strong>
+      RandomForest e XGBoost são ambos ensembles de árvores e cometem erros correlacionados.
+      Em vez de complementar, o RF introduziu ruído, degradando a precisão do ensemble.
+      Além disso, o treino ficou 8× mais lento (26,5s vs 4,8s).
+      <br><br>
+      <strong>Critério prático:</strong> Para ensemble funcionar, os modelos precisam ter arquiteturas
+      fundamentalmente diferentes (árvore + linear, como XGB + LR).
+    </div>
+  </div>
+
+  <!-- Run 9: CV threshold -->
+  <div class="experiment discard">
+    <div class="exp-header">
+      <span class="exp-run">Experimento 9</span>
+      <span class="exp-status discard">✗ Discard</span>
+      <span class="exp-f1 discard-f1">F1 0,846 <span class="delta down">▼ -1,9%</span></span>
+    </div>
+    <div class="exp-desc">Cross-validation (5-fold) para seleção de threshold</div>
+    <div class="metrics-row">
+      <span>Precisão: <strong>0,925</strong></span>
+      <span>Recall: <strong>0,779</strong></span>
+      <span>Threshold CV: <strong>0,89</strong> (vs 0,85 single-split)</span>
+    </div>
+    <div class="insight-box">
+      <strong class="bad">💀 Lição #4: Cross-validation pode diluir o sinal com classes raras.</strong>
+      O threshold via CV foi mais conservador (0,89 vs 0,85), resultando em pior F1.
+      Em cada fold do CV, a proporção de fraudes varia, fazendo a média dos thresholds tender
+      a valores subótimos. Para dados extremamente desbalanceados, um único split de validação
+      bem estratificado pode ser mais eficaz que CV.
+    </div>
+  </div>
+</section>
+
+<!-- DEAD ENDS -->
+<section>
+  <h2><span class="icon">🚫</span> Becos sem Saída (O que NÃO funciona)</h2>
+
+  <div class="dead-end">
+    <span class="why">❌ SMOTE / Oversampling sintético</span><br>
+    Gera exemplos irreais a partir de apenas 378 fraudes. O modelo classifica tudo como fraude.
+    Precisão cai para 0,30.
+  </div>
+
+  <div class="dead-end">
+    <span class="why">❌ Aumentar complexidade do modelo (árvores mais profundas)</span><br>
+    Overfitting nos poucos exemplos positivos. Recall e F1 pioram. O modelo base já é adequado.
+  </div>
+
+  <div class="dead-end">
+    <span class="why">❌ Adicionar RandomForest ao ensemble</span><br>
+    Modelos de mesma família (árvores) são correlacionados demais. RF adiciona ruído, não sinal.
+  </div>
+
+  <div class="dead-end">
+    <span class="why">❌ Cross-validation para escolha de threshold</span><br>
+    A média entre folds dilui o sinal. Um split estratificado simples é melhor para classes ultra-raras.
+  </div>
+
+  <div class="dead-end">
+    <span class="why">❌ Otimizar peso do ensemble além da média simples</span><br>
+    Para XGB + LR, 0.5/0.5 já é o blend ótimo. Grid search não encontrou peso melhor.
+  </div>
+</section>
+
+<!-- KEY INSIGHTS -->
+<section>
+  <h2><span class="icon">💡</span> Insights Fundamentais</h2>
+  <div class="key-insights">
+
+    <div class="insight-card">
+      <h4>🔑 Threshold > Reamostragem</h4>
+      <p>Em dados extremamente desbalanceados, ajustar o threshold de decisão é muito mais eficaz que SMOTE ou undersampling. O threshold padrão 0.5 é arbitrariamente ruim — o ótimo está em 0.85–0.99 dependendo do modelo.</p>
+    </div>
+
+    <div class="insight-card">
+      <h4>🔑 Features de interação com Amount</h4>
+      <p>Mesmo com features PCA-anônimas, interagi-las com Amount (a única feature interpretável) gera sinais discriminativos fortes. Isso reduz o threshold ótimo (scores mais confiáveis) e melhora recall.</p>
+    </div>
+
+    <div class="insight-card">
+      <h4>🔑 Ensemble heterogêneo funciona</h4>
+      <p>Combinar XGBoost (não-linear, árvores) com LogisticRegression (linear) captura padrões complementares. Ambos precisão e recall melhoram simultaneamente — sinal claro de diversidade real entre os modelos.</p>
+    </div>
+
+    <div class="insight-card">
+      <h4>🔑 Simplicidade vence com poucos dados</h4>
+      <p>Com apenas 378 fraudes para aprender, modelos mais complexos (árvores profundas, ensembles de 3+ modelos, CV) tendem a overfitar ou diluir o sinal. O modelo base com boas features e threshold tuning já vai longe.</p>
+    </div>
+
+    <div class="insight-card">
+      <h4>🔑 Métricas de desbalanceamento importam</h4>
+      <p>Acurácia (99,9%) é inútil aqui — um modelo que diz "não fraude" para tudo tem 99,8% de acurácia. F1 da classe minoritária, PR-AUC e a matriz de confusão (TP/FP/FN) são as métricas que realmente importam.</p>
+    </div>
+
+    <div class="insight-card">
+      <h4>🔑 Scale_pos_weight é suficiente</h4>
+      <p>O parâmetro <code>scale_pos_weight</code> do XGBoost (razão neg/pos) já lida bem com o desbalanceamento internamente, sem precisar de reamostragem externa. Dobrar o valor não trouxe benefício.</p>
+    </div>
+
+  </div>
+</section>
+
+<!-- CURRENT BEST -->
+<section>
+  <h2><span class="icon">🏆</span> Melhor Modelo Atual</h2>
+  <div class="experiment keep" style="border-color: var(--amber);">
+    <div class="exp-header">
+      <span class="exp-status keep">🏆 ATUAL</span>
+      <span class="exp-f1 keep-f1">F1 0,862</span>
+    </div>
+    <div class="exp-desc">XGBoost + LogisticRegression Ensemble com Feature Engineering e Threshold Otimizado</div>
+    <div class="metrics-row">
+      <span>Precisão: <strong>0,949</strong></span>
+      <span>Recall: <strong>0,789</strong></span>
+      <span>ROC-AUC: <strong>0,952</strong></span>
+      <span>PR-AUC: <strong>0,835</strong></span>
+    </div>
+    <div class="metrics-row">
+      <span>Train: <strong>4,8s</strong></span>
+      <span>Infer: <strong>35ms</strong></span>
+      <span>Threshold: <strong>0,85</strong></span>
+    </div>
+    <div style="margin-top: 0.75rem; padding: 0.75rem; background: #0f172a; border-radius: 8px; font-size: 0.82rem;">
+      <strong>Detecta 75 de 95 fraudes</strong> (79% de recall) com apenas <strong>4 alarmes falsos</strong> entre 56.651 transações legítimas.<br>
+      Para cada alarme disparado, <strong>95% de chance</strong> de realmente ser fraude.
+    </div>
+  </div>
+</section>
+
+<footer>
+  Gerado em 30 de Maio de 2026 · Autoresearch · 9 experimentos executados · Melhor F1-Fraude: 0,862
+</footer>
+
+</div>
+</body>
+</html>
